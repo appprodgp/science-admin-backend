@@ -31,6 +31,7 @@ ARTICLE_STATUSES: tuple[str, ...] = (
     "generation_pending",
     "generation_failed",
     "pending_review",
+    "approved",
     "published",
     "rejected",
     "failed",
