@@ -40,8 +40,8 @@ ARTICLE_STATUSES: tuple[str, ...] = (
 class Article(Base):
     """Article metadata and pipeline state.
 
-    Step 2 supports manual/fake metadata creation for admin testing only. Discovery,
-    XML parsing, LLM generation, and workflows are intentionally not implemented yet.
+    Discovery/XML extraction feeds Step 4 AI curation and generated drafts for
+    human review. Public publishing still only happens through review actions.
     """
 
     __tablename__ = "articles"
@@ -98,4 +98,3 @@ class Article(Base):
     llm_runs: Mapped[list[LlmRun]] = relationship(
         "LlmRun", back_populates="article", passive_deletes=True
     )
-

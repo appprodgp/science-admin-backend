@@ -7,8 +7,9 @@ Current implementation status:
 - **Step 1 complete:** backend skeleton, `.env` loading, safe health/config/database checks, logging, and Neon connectivity.
 - **Step 2 complete:** SQLAlchemy schema, Alembic migration, idempotent journal seed data, and backend admin CRUD/list APIs.
 - **Step 3 complete:** Crossref metadata discovery, CC BY 4.0 license filtering, structured XML finding/downloading, JATS-like XML parsing, Cloudflare R2 XML upload, and manual article ingestion.
+- **Step 4 complete:** AI curation, plain-language draft generation, fact-checking, LLM audit logging, and pending-review handoff.
 
-This project still intentionally does **not** implement OpenAI/Gemini LLM curation, article generation, fact-checking, Inngest workflows, a Next.js admin dashboard, or a public mobile app.
+This project still intentionally does **not** implement Inngest/background workflows, a Next.js admin dashboard, a public mobile app, PDF ingestion, GROBID, or automatic publishing.
 
 ## Windows PowerShell setup
 
@@ -66,6 +67,25 @@ R2_PUBLIC_BASE_URL=...
 ```
 
 `CROSSREF_CONTACT_EMAIL` is used in the Crossref `User-Agent` / `mailto` metadata. R2 secret values are only used by the storage client and are never returned by API responses.
+
+For Step 4, configure at least one LLM provider before running AI curation/generation/fact-checking:
+
+```env
+OPENAI_API_KEY=...
+OPENAI_MODEL_CURATION=gpt-4o-mini
+OPENAI_MODEL_GENERATION=gpt-4o-mini
+OPENAI_MODEL_FACTCHECK=gpt-4o-mini
+
+GEMINI_API_KEY=...
+GEMINI_MODEL_CURATION=gemini-2.5-flash
+GEMINI_MODEL_GENERATION=gemini-2.5-flash
+
+LLM_PRIMARY_PROVIDER=openai
+LLM_FALLBACK_PROVIDER=gemini
+MAX_LLM_GENERATIONS_PER_RUN=5
+```
+
+Secrets are never returned by config-check routes. Full prompts are not stored in the database; only LLM run metadata and safe error messages are saved.
 
 ## Run the API locally
 
@@ -129,6 +149,7 @@ The seed script inserts or updates these journals without creating duplicates:
 
 ```powershell
 python -m compileall app scripts
+python scripts\test_llm_schema_validation.py
 python scripts\test_xml_parse_sample.py
 python scripts\test_crossref_one_journal.py
 python -m alembic upgrade head
@@ -154,6 +175,7 @@ Invoke-RestMethod http://127.0.0.1:8000/api/admin/db-check
 Invoke-RestMethod http://127.0.0.1:8000/api/admin/journals
 Invoke-RestMethod http://127.0.0.1:8000/api/admin/articles
 Invoke-RestMethod http://127.0.0.1:8000/api/admin/discovery/summary
+Invoke-RestMethod -Method Post -ContentType "application/json" -Body '{"limit":1}' http://127.0.0.1:8000/api/admin/ai/run
 Invoke-RestMethod http://127.0.0.1:8000/api/admin/review/queue
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/admin/jobs/test-job
 Invoke-RestMethod http://127.0.0.1:8000/api/admin/jobs
@@ -359,6 +381,92 @@ Invoke-RestMethod -Method Post `
 
 Then inspect its extracted sections/figures using the existing article validation routes listed above.
 
+## Step 4 AI curation, generation, and fact-checking
+
+Step 4 converts already-extracted source articles into human-review-ready plain-language drafts. It is deliberately conservative:
+
+- It processes only `status="extracted"` articles in batch runs unless you explicitly pass an `article_id`.
+- It starts with curation and only generates drafts for selected articles.
+- Generated drafts start as `review_status="draft"` and are not shown in the review queue until fact-checking passes.
+- Fact-checking compares the generated draft against the extracted article context and stores `fact_check_json`.
+- Passing fact-check sets the generated article to `review_status="pending"` and the source article to `status="pending_review"`.
+- Failing fact-check sets `review_status="needs_revision"` and `status="generation_failed"`.
+- Nothing is auto-published. Publishing still requires explicit admin review approval.
+
+### Cost controls
+
+Start with one article at a time:
+
+```powershell
+$body = @{ limit = 1; article_id = $null } | ConvertTo-Json
+
+Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8000/api/admin/ai/run `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+The default API limit is `1`, and the maximum accepted limit is `MAX_LLM_GENERATIONS_PER_RUN`.
+
+### Step 4 validation scripts
+
+Schema validation only; no API calls:
+
+```powershell
+python scripts\test_llm_schema_validation.py
+```
+
+Controlled one-article curation test:
+
+```powershell
+python scripts\test_step4_one_article.py
+```
+
+`scripts/test_step4_one_article.py` finds one `extracted` article, prints its title/DOI, runs curation, and stops by default. It will not generate or fact-check unless you edit the top-level constant to `RUN_GENERATION = True`.
+
+### Step 4 Swagger routes
+
+Prefix: `/api/admin/ai`
+
+- `POST /curate/{article_id}` curates one explicit article and returns the stored curation score.
+- `POST /generate/{article_id}` generates one draft for a curated/selected article and leaves it as `review_status="draft"`.
+- `POST /fact-check/{generated_article_id}` fact-checks one generated draft and stores `fact_check_json`.
+- `POST /run` runs the synchronous Step 4 pipeline. Use `{"limit":1}` first.
+- `GET /curation-scores/{article_id}` lists curation scores for an article.
+- `GET /generated/{article_id}` lists generated drafts for an article.
+
+Useful inspection routes after a run:
+
+- `GET /api/admin/llm-runs/` shows LLM audit records.
+- `GET /api/admin/review/queue` shows generated articles with `review_status="pending"`.
+- `GET /api/admin/articles/?status=pending_review` shows articles ready for human review.
+- `GET /api/admin/articles/?status=not_selected` shows articles rejected during AI curation.
+
+### Step 4 article statuses
+
+- `extracted`: XML/manual sections and figures are saved and ready for AI curation.
+- `curated`: curation selected the source article for generation.
+- `not_selected`: curation did not meet the hard-coded selection rule.
+- `generation_pending`: draft text exists but fact-checking has not promoted it to review.
+- `generation_failed`: fact-checking found unsupported claims, overhype, or missing limitations.
+- `pending_review`: fact-checking passed and the generated draft is waiting for admin review.
+
+Recommended Step 4 manual validation flow:
+
+```powershell
+python -m compileall app scripts
+python scripts\test_llm_schema_validation.py
+uvicorn app.main:app --reload
+```
+
+Then test in Swagger:
+
+1. `POST /api/admin/ai/run` with `{"limit":1}`.
+2. `GET /api/admin/llm-runs/`.
+3. `GET /api/admin/review/queue`.
+4. `GET /api/admin/articles/?status=pending_review`.
+5. `GET /api/admin/articles/?status=not_selected`.
+
 ### Review
 
 Prefix: `/api/admin/review`
@@ -386,4 +494,4 @@ Prefix: `/api/admin/llm-runs`
 - `GET /` lists LLM run records.
 - `GET /{llm_run_id}` returns one LLM run record.
 
-Step 2 only stores and lists LLM run records. It does not call OpenAI or Gemini.
+Step 4 stores every OpenAI/Gemini curation, generation, and fact-check attempt in `llm_runs` with provider/model, token estimates when available, status, and safe error messages only.
