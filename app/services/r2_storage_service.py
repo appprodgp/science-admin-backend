@@ -19,7 +19,7 @@ def get_r2_client():
     settings = get_settings()
     if not all(
         [
-            settings.R2_ACCOUNT_ID.strip(),
+            settings.r2_endpoint_url,
             settings.R2_BUCKET_NAME.strip(),
             settings.R2_ACCESS_KEY_ID,
             settings.R2_SECRET_ACCESS_KEY,
@@ -29,7 +29,7 @@ def get_r2_client():
 
     return boto3.client(
         "s3",
-        endpoint_url=f"https://{settings.R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
+        endpoint_url=settings.r2_endpoint_url,
         aws_access_key_id=settings.R2_ACCESS_KEY_ID.get_secret_value(),
         aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY.get_secret_value(),
         region_name="auto",

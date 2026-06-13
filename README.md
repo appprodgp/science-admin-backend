@@ -8,8 +8,10 @@ Current implementation status:
 - **Step 2 complete:** SQLAlchemy schema, Alembic migration, idempotent journal seed data, and backend admin CRUD/list APIs.
 - **Step 3 complete:** Crossref metadata discovery, CC BY 4.0 license filtering, structured XML finding/downloading, JATS-like XML parsing, Cloudflare R2 XML upload, and manual article ingestion.
 - **Step 4 complete:** AI curation, plain-language draft generation, fact-checking, LLM audit logging, and pending-review handoff.
+- **Step 5 complete:** Admin review workflow and local Next.js dashboard integration.
+- **Step 6A complete:** FastAPI backend deployment preparation for Google Cloud Run, including Docker support, production-safe CORS/config checks, preflight script, and deployment notes.
 
-This project still intentionally does **not** implement Inngest/background workflows, a Next.js admin dashboard, a public mobile app, PDF ingestion, GROBID, or automatic publishing.
+This project still intentionally does **not** implement Inngest/background workflows, a public mobile app, PDF ingestion, GROBID, or automatic publishing.
 
 ## Windows PowerShell setup
 
@@ -104,6 +106,71 @@ Interactive docs:
 ```text
 http://127.0.0.1:8000/docs
 ```
+
+## Step 6A backend deployment preparation
+
+Step 6A prepares the FastAPI backend for Google Cloud Run deployment only. It does **not** deploy automatically, add public app APIs, add Inngest/background workflows, add PDF/GROBID processing, or change LLM prompts.
+
+### Docker local test
+
+Build the production-style container from the repository root:
+
+```powershell
+docker build -t science-admin-backend:local .
+```
+
+Run it locally with your uncommitted `.env` file:
+
+```powershell
+docker run --rm --env-file .env -p 8080:8080 science-admin-backend:local
+```
+
+The container listens on `0.0.0.0` and uses the Cloud Run-compatible `PORT` environment variable, defaulting to `8080` when `PORT` is not set.
+
+Test the container:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8080/health
+Invoke-RestMethod http://127.0.0.1:8080/api/admin/config-check
+Invoke-RestMethod http://127.0.0.1:8080/api/admin/db-check
+```
+
+`/health` is intentionally lightweight and does not depend on the database. `/ready` and `/api/admin/db-check` safely run a simple database connectivity check.
+
+### Production preflight
+
+Run the preflight script before deployment configuration changes:
+
+```powershell
+python scripts\production_preflight.py
+```
+
+In local development mode it prints safe booleans/counts and skips production-required variable enforcement. With `ENVIRONMENT=production`, it checks required production variables, verifies database connectivity using the existing safe DB check, prints missing/invalid variable names only, and does not call OpenAI, Gemini, or Crossref or mutate the database.
+
+### Cloud Run deployment outline
+
+Deployment notes live in:
+
+```text
+deploy/cloud-run.md
+```
+
+The notes include required Google Cloud services, local Docker commands, Cloud Build and Cloud Run command templates, and post-deploy health/config/database check URLs. Placeholder names are used throughout: `PROJECT_ID`, `REGION`, `SERVICE_NAME`, and `IMAGE_NAME`.
+
+Use `deploy/backend.env.example` as a placeholder-only reference for Cloud Run environment variables. Do not put real secrets in that file.
+
+### Environment variable safety
+
+- Never commit `.env`, `.env.*`, production env files, downloaded Secret Manager exports, private keys, or local secret files.
+- Use Secret Manager or Cloud Run secret bindings for real `DATABASE_URL`, LLM API keys, and R2 credentials.
+- `/api/admin/config-check` returns only booleans, counts, environment name, and numeric limits. It does not expose secret values.
+- Production R2 configuration should use `R2_ENDPOINT_URL`. Existing local `R2_ACCOUNT_ID` support is kept for backward compatibility.
+
+### CORS notes
+
+- Local development allows `http://localhost:3000` and `http://127.0.0.1:3000` for the Next.js dashboard.
+- Production CORS must be configured through `CORS_ALLOWED_ORIGINS` or `ADMIN_DASHBOARD_ORIGIN` and must contain exactly one deployed admin dashboard origin.
+- Wildcard CORS origins (`*`) are rejected in production.
 
 ## Step 2 database setup
 

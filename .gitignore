@@ -2,7 +2,12 @@
 __pycache__/
 *.pyc
 .env
-.env.local
+.env.*
+!.env.example
+env.local
+deploy/*.env
+deploy/*.env.*
+!deploy/*.env.example
 logs/
 .pytest_cache/
 .mypy_cache/
