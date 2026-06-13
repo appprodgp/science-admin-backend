@@ -6,8 +6,9 @@ Current implementation status:
 
 - **Step 1 complete:** backend skeleton, `.env` loading, safe health/config/database checks, logging, and Neon connectivity.
 - **Step 2 complete:** SQLAlchemy schema, Alembic migration, idempotent journal seed data, and backend admin CRUD/list APIs.
+- **Step 3 complete:** Crossref metadata discovery, CC BY 4.0 license filtering, structured XML finding/downloading, JATS-like XML parsing, Cloudflare R2 XML upload, and manual article ingestion.
 
-This project still intentionally does **not** implement Crossref article discovery, XML finding/parsing, OpenAI/Gemini LLM calls, Inngest workflows, or a Next.js admin dashboard.
+This project still intentionally does **not** implement OpenAI/Gemini LLM curation, article generation, fact-checking, Inngest workflows, a Next.js admin dashboard, or a public mobile app.
 
 ## Windows PowerShell setup
 
@@ -52,6 +53,19 @@ DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST/DBNAME?sslmode=require
 ```
 
 The application exposes config-check routes that report whether required values are present, but they never return secret values.
+
+For Step 3, configure these values when you want live discovery and R2 XML storage:
+
+```env
+CROSSREF_CONTACT_EMAIL=you@example.com
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET_NAME=...
+R2_PUBLIC_BASE_URL=...
+```
+
+`CROSSREF_CONTACT_EMAIL` is used in the Crossref `User-Agent` / `mailto` metadata. R2 secret values are only used by the storage client and are never returned by API responses.
 
 ## Run the API locally
 
@@ -115,6 +129,8 @@ The seed script inserts or updates these journals without creating duplicates:
 
 ```powershell
 python -m compileall app scripts
+python scripts\test_xml_parse_sample.py
+python scripts\test_crossref_one_journal.py
 python -m alembic upgrade head
 python scripts\seed_journals.py
 uvicorn app.main:app --reload
@@ -137,6 +153,7 @@ Invoke-RestMethod http://127.0.0.1:8000/api/admin/config-check
 Invoke-RestMethod http://127.0.0.1:8000/api/admin/db-check
 Invoke-RestMethod http://127.0.0.1:8000/api/admin/journals
 Invoke-RestMethod http://127.0.0.1:8000/api/admin/articles
+Invoke-RestMethod http://127.0.0.1:8000/api/admin/discovery/summary
 Invoke-RestMethod http://127.0.0.1:8000/api/admin/review/queue
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/admin/jobs/test-job
 Invoke-RestMethod http://127.0.0.1:8000/api/admin/jobs
@@ -216,6 +233,131 @@ Invoke-RestMethod -Method Post `
 ```
 
 Allowed article statuses are documented in `app/models/article.py`.
+
+## Step 3 article discovery and ingestion
+
+Step 3 is limited to article discovery and extraction. It does not call OpenAI, Gemini, GROBID, or any article-generation/fact-checking workflow.
+
+### Install Step 3 dependencies
+
+The required parser/upload dependencies are included in `requirements.txt`:
+
+- `beautifulsoup4==4.12.3`
+- `lxml==5.3.0`
+- `python-multipart==0.0.12`
+
+Install all dependencies with:
+
+```powershell
+pip install -r requirements.txt
+```
+
+### Test Crossref metadata discovery without database writes
+
+```powershell
+python scripts\test_crossref_one_journal.py
+```
+
+The script queries a small number of recent Crossref records for the ISSN constant in the script and prints only DOI/title/license metadata.
+
+### Test XML parsing without external APIs
+
+```powershell
+python scripts\test_xml_parse_sample.py
+```
+
+The sample parser script uses a tiny local JATS-like XML string and prints extracted sections and figure captions.
+
+### Run discovery synchronously
+
+Start the API:
+
+```powershell
+uvicorn app.main:app --reload
+```
+
+Then run a controlled discovery pass from Swagger or PowerShell:
+
+```powershell
+$body = @{ limit_per_journal = 3 } | ConvertTo-Json
+
+Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8000/api/admin/discovery/run `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+Discovery currently runs synchronously. It:
+
+1. Loads active journals.
+2. Searches Crossref by online ISSN first, then print ISSN.
+3. Accepts only CC BY 4.0 license URLs.
+4. Finds structured XML/full-text sources from Crossref links, Europe PMC, or PMC-style OA metadata.
+5. Downloads XML only, uploads it to R2 under `articles/xml/{safe_doi}.xml`, parses sections/figures, and marks articles `extracted`.
+
+No PDFs are downloaded, and GROBID is not used.
+
+### Discovery summary
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/admin/discovery/summary
+```
+
+The summary returns counts for:
+
+- `metadata_found`
+- `license_rejected`
+- `xml_not_found`
+- `xml_ready`
+- `extracted`
+- `failed`
+
+### Inspect extracted articles, sections, and figures
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/api/admin/articles/?status=extracted"
+```
+
+For an extracted article ID:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/admin/articles/<ARTICLE_ID>/sections
+Invoke-RestMethod http://127.0.0.1:8000/api/admin/articles/<ARTICLE_ID>/figures
+```
+
+### Manual article ingestion
+
+Manual ingestion requires `permission_confirmed=true` and a CC BY 4.0 license URL. It creates or updates the article by DOI, stores pasted sections and figure captions, sets `xml_source="manual"`, and marks the article `extracted`.
+
+```powershell
+$manualArticle = @{
+  doi = "10.1234/manual-step3-example"
+  title = "Manual Step 3 Example Article"
+  journal_name = "Example Open Journal"
+  journal_issn = "1234-5678"
+  publisher = "Example Publisher"
+  published_date = "2026-06-13"
+  source_url = "https://example.org/manual-step3-example"
+  license_url = "https://creativecommons.org/licenses/by/4.0/"
+  license_type = $null
+  field = "biology"
+  abstract = "A short manually pasted abstract."
+  introduction = "A short introduction."
+  methods = "A short methods section."
+  results = "A short results section."
+  discussion = "A short discussion section."
+  conclusion = "A short conclusion."
+  figure_captions = @("Figure 1. Example manually pasted caption.")
+  permission_confirmed = $true
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8000/api/admin/manual/articles `
+  -ContentType "application/json" `
+  -Body $manualArticle
+```
+
+Then inspect its extracted sections/figures using the existing article validation routes listed above.
 
 ### Review
 
