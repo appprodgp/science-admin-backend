@@ -10,6 +10,7 @@ Current implementation status:
 - **Step 4 complete:** AI curation, plain-language draft generation, fact-checking, LLM audit logging, and pending-review handoff.
 - **Step 5 complete:** Admin review workflow and local Next.js dashboard integration.
 - **Step 6A complete:** FastAPI backend deployment preparation for Google Cloud Run, including Docker support, production-safe CORS/config checks, preflight script, and deployment notes.
+- **Step 6B complete:** Next.js dashboard deployment preparation, including production env handling, Cloudflare deployment notes, Cloudflare Access guidance, and build checks.
 
 This project still intentionally does **not** implement Inngest/background workflows, a public mobile app, PDF ingestion, GROBID, or automatic publishing.
 
@@ -171,6 +172,62 @@ Use `deploy/backend.env.example` as a placeholder-only reference for Cloud Run e
 - Local development allows `http://localhost:3000` and `http://127.0.0.1:3000` for the Next.js dashboard.
 - Production CORS must be configured through `CORS_ALLOWED_ORIGINS` or `ADMIN_DASHBOARD_ORIGIN` and must contain exactly one deployed admin dashboard origin.
 - Wildcard CORS origins (`*`) are rejected in production.
+
+## Step 6B dashboard deployment preparation
+
+Step 6B prepares the local Next.js admin dashboard in `science-admin-dashboard/` for deployment. It does **not** deploy automatically, add authentication code, implement a public app, add publishing features, store frontend secrets, or hard-code production backend URLs.
+
+### Local dashboard build check
+
+From the dashboard directory:
+
+```powershell
+cd science-admin-dashboard
+npm run lint
+npm run build
+npm run check
+```
+
+`npm run check` runs linting and a production build.
+
+### Production API base URL
+
+All dashboard API calls use this public environment variable:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://YOUR_BACKEND_CLOUD_RUN_URL
+```
+
+Use `science-admin-dashboard/.env.example` as the placeholder template. Keep local-only values in `science-admin-dashboard/.env.local`; that file is ignored and should not be committed.
+
+`NEXT_PUBLIC_*` values are visible to browser users, so do not put API keys, database URLs, R2 credentials, or other secrets in the dashboard environment.
+
+The dashboard header shows the configured API base URL and backend health status. If the backend is unreachable or the env var is missing, it displays a clear error message.
+
+### Dashboard deployment options
+
+Deployment notes live in:
+
+```text
+deploy/dashboard-deployment.md
+```
+
+The notes cover:
+
+- **Option A: Cloudflare Pages static export** — only if the dashboard is converted to be static-export compatible. Current dynamic admin routes may make plain static export unsuitable.
+- **Option B: Cloudflare Workers/OpenNext** — recommended for full Next.js App Router support.
+
+Do not hard-code the production backend URL in source code. Configure `NEXT_PUBLIC_API_BASE_URL` in the Cloudflare deployment environment.
+
+### Cloudflare Access protection
+
+Cloudflare Access notes live in:
+
+```text
+deploy/cloudflare-access.md
+```
+
+Protect the deployed admin dashboard hostname with Cloudflare Access and allow only approved admin emails. The dashboard itself does not implement login yet; Cloudflare Access gates users before they reach the app. Later, backend-side verification of Cloudflare Access identity headers can be added if needed.
 
 ## Step 2 database setup
 

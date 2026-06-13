@@ -154,7 +154,7 @@ export class ApiError extends Error {
     }
 }
 
-function getApiBaseUrl(): string {
+export function getApiBaseUrl(): string {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
     if (!baseUrl) {
         throw new ApiError("NEXT_PUBLIC_API_BASE_URL is not configured.", 0);
