@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 import { Card } from "@/components/Card";
 import { EmptyState } from "@/components/EmptyState";
@@ -23,8 +26,6 @@ import {
 } from "@/lib/api";
 import { formatDate, formatDateTime } from "@/lib/format";
 
-export const dynamic = "force-dynamic";
-
 function groupSections(sections: ArticleSection[]): Record<string, ArticleSection[]> {
     return sections.reduce<Record<string, ArticleSection[]>>((grouped, section) => {
         const key = section.section_name || "Unlabeled section";
@@ -33,35 +34,82 @@ function groupSections(sections: ArticleSection[]): Record<string, ArticleSectio
     }, {});
 }
 
-export default async function ArticleDetailPage({ params }: { params: { articleId: string } }) {
-    const articleId = params.articleId;
-    let article: Article;
-    let sections: ArticleSection[] = [];
-    let figures: ArticleFigure[] = [];
-    let curationScores: CurationScore[] = [];
-    let generated: GeneratedArticle[] = [];
-    let relatedError: string | null = null;
+export function ArticleDetailPageClient() {
+    const searchParams = useSearchParams();
+    const articleId = searchParams.get("id") ?? "";
+    const [article, setArticle] = useState<Article | null>(null);
+    const [sections, setSections] = useState<ArticleSection[]>([]);
+    const [figures, setFigures] = useState<ArticleFigure[]>([]);
+    const [curationScores, setCurationScores] = useState<CurationScore[]>([]);
+    const [generated, setGenerated] = useState<GeneratedArticle[]>([]);
+    const [error, setError] = useState<string | null>(null);
+    const [relatedError, setRelatedError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
 
-    try {
-        article = await getArticle(articleId);
-    } catch (error) {
-        const message = getErrorMessage(error);
-        if (message.toLowerCase().includes("not found")) notFound();
-        return <ErrorMessage message={message} />;
-    }
+    useEffect(() => {
+        let cancelled = false;
 
-    try {
-        [sections, figures, curationScores, generated] = await Promise.all([
-            getArticleSections(articleId),
-            getArticleFigures(articleId),
-            getCurationScores(articleId),
-            getGeneratedForArticle(articleId),
-        ]);
-    } catch (error) {
-        relatedError = getErrorMessage(error);
-    }
+        async function loadArticleDetail() {
+            if (!articleId) {
+                setArticle(null);
+                setError("Missing article id. Open this page from the Articles table or add ?id=<article_id>.");
+                setLoading(false);
+                return;
+            }
 
-    const groupedSections = groupSections(sections);
+            setLoading(true);
+            setError(null);
+            setRelatedError(null);
+            setArticle(null);
+            setSections([]);
+            setFigures([]);
+            setCurationScores([]);
+            setGenerated([]);
+
+            try {
+                const articleData = await getArticle(articleId);
+                if (cancelled) return;
+                setArticle(articleData);
+            } catch (caught) {
+                if (!cancelled) {
+                    setError(getErrorMessage(caught));
+                    setLoading(false);
+                }
+                return;
+            }
+
+            try {
+                const [sectionData, figureData, scoreData, generatedData] = await Promise.all([
+                    getArticleSections(articleId),
+                    getArticleFigures(articleId),
+                    getCurationScores(articleId),
+                    getGeneratedForArticle(articleId),
+                ]);
+                if (!cancelled) {
+                    setSections(sectionData);
+                    setFigures(figureData);
+                    setCurationScores(scoreData);
+                    setGenerated(generatedData);
+                }
+            } catch (caught) {
+                if (!cancelled) setRelatedError(getErrorMessage(caught));
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        }
+
+        void loadArticleDetail();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [articleId]);
+
+    const groupedSections = useMemo(() => groupSections(sections), [sections]);
+
+    if (loading) return <p className="text-sm text-slate-500">Loading article detail...</p>;
+    if (error) return <ErrorMessage message={error} />;
+    if (!article) return <EmptyState title="Article not found" message="No article detail is available for this id." />;
 
     return (
         <div>
@@ -186,7 +234,7 @@ export default async function ArticleDetailPage({ params }: { params: { articleI
                                 {generated.map((draft) => (
                                     <Link
                                         key={draft.id}
-                                        href={`/review/${draft.id}`}
+                                        href={`/review-detail?id=${draft.id}`}
                                         className="block rounded-xl border border-slate-200 p-3 transition hover:border-slate-400 hover:bg-slate-50"
                                     >
                                         <div className="flex items-start justify-between gap-3">

@@ -1,7 +1,7 @@
 "use client";
 
 import { JsonBlock } from "@/components/JsonBlock";
-import type { ActionResult } from "@/app/actions";
+import type { ActionResult } from "@/lib/action-result";
 
 export function ActionResultPanel({ result }: { result: ActionResult<unknown> | null }) {
     if (!result) return null;

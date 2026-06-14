@@ -1,22 +1,28 @@
 "use client";
 
-import { useTransition, useState } from "react";
+import { useState } from "react";
 
-import { runAiPipelineAction, runDiscoveryAction, type ActionResult } from "@/app/actions";
 import { ActionResultPanel } from "@/components/ActionResultPanel";
+import { toActionResult, type ActionResult } from "@/lib/action-result";
+import { runAiPipeline, runDiscovery } from "@/lib/api";
 
 export function DashboardQuickActions() {
-    const [isPending, startTransition] = useTransition();
+    const [isPending, setIsPending] = useState(false);
     const [result, setResult] = useState<ActionResult<unknown> | null>(null);
 
     function run(kind: "discovery" | "ai") {
         setResult(null);
-        startTransition(() => {
-            void (async () => {
-                const actionResult = kind === "discovery" ? await runDiscoveryAction(1) : await runAiPipelineAction(1, null);
+        setIsPending(true);
+        void (async () => {
+            try {
+                const actionResult = await toActionResult(() =>
+                    kind === "discovery" ? runDiscovery(1) : runAiPipeline(1, null),
+                );
                 setResult(actionResult);
-            })();
-        });
+            } finally {
+                setIsPending(false);
+            }
+        })();
     }
 
     return (

@@ -204,7 +204,7 @@ Use `science-admin-dashboard/.env.example` as the placeholder template. Keep loc
 
 The dashboard header shows the configured API base URL and backend health status. If the backend is unreachable or the env var is missing, it displays a clear error message.
 
-### Dashboard deployment options
+### Dashboard deployment target
 
 Deployment notes live in:
 
@@ -212,10 +212,17 @@ Deployment notes live in:
 deploy/dashboard-deployment.md
 ```
 
-The notes cover:
+The dashboard deploy target is **Cloudflare Pages static export**:
 
-- **Option A: Cloudflare Pages static export** — only if the dashboard is converted to be static-export compatible. Current dynamic admin routes may make plain static export unsuitable.
-- **Option B: Cloudflare Workers/OpenNext** — recommended for full Next.js App Router support.
+- Build command: `npm run build`
+- Output directory: `out`
+- Environment variable:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://science-admin-backend-471704454900.us-central1.run.app
+```
+
+The dashboard is static-export compatible and fetches backend data client-side. Detail pages use query-param routes such as `/article-detail?id=...` and `/review-detail?id=...` instead of dynamic App Router segments.
 
 Do not hard-code the production backend URL in source code. Configure `NEXT_PUBLIC_API_BASE_URL` in the Cloudflare deployment environment.
 

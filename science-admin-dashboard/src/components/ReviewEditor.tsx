@@ -1,17 +1,17 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 
+import { toActionResult, type ActionResult } from "@/lib/action-result";
 import {
-    approveGeneratedArticleAction,
-    rejectGeneratedArticleAction,
-    requestRevisionAction,
-    saveGeneratedArticleAction,
-    type ActionResult,
-} from "@/app/actions";
+    approveGeneratedArticle,
+    rejectGeneratedArticle,
+    requestRevision,
+    updateGeneratedArticle,
+    type ReviewGeneratedArticle,
+} from "@/lib/api";
 import { JsonBlock } from "@/components/JsonBlock";
 import { StatusBadge } from "@/components/StatusBadge";
-import type { ReviewGeneratedArticle } from "@/lib/api";
 import { formatDate, prettyJson } from "@/lib/format";
 
 type ReasonMode = "request_revision" | "reject" | null;
@@ -43,7 +43,7 @@ export function ReviewEditor({ initialArticle }: { initialArticle: ReviewGenerat
     const [limitationsJson, setLimitationsJson] = useState(prettyJson(initialArticle.limitations_json ?? null));
     const [reasonMode, setReasonMode] = useState<ReasonMode>(null);
     const [reason, setReason] = useState("");
-    const [isPending, startTransition] = useTransition();
+    const [isPending, setIsPending] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [lastResult, setLastResult] = useState<ActionResult<unknown> | null>(null);
 
@@ -93,31 +93,39 @@ export function ReviewEditor({ initialArticle }: { initialArticle: ReviewGenerat
             return;
         }
 
-        startTransition(() => {
-            void (async () => {
-                const result = await saveGeneratedArticleAction(article.id, {
-                    plain_title: nullableText(plainTitle),
-                    subtitle: nullableText(subtitle),
-                    article_body: nullableText(articleBody),
-                    source_attribution: nullableText(sourceAttribution),
-                    difficult_words_json: difficultWords.value,
-                    mcqs_json: mcqs.value,
-                    limitations_json: limitations.value,
-                    note: "Saved edits from local admin dashboard.",
-                });
+        setIsPending(true);
+        void (async () => {
+            try {
+                const result = await toActionResult(() =>
+                    updateGeneratedArticle(article.id, {
+                        plain_title: nullableText(plainTitle),
+                        subtitle: nullableText(subtitle),
+                        article_body: nullableText(articleBody),
+                        source_attribution: nullableText(sourceAttribution),
+                        difficult_words_json: difficultWords.value,
+                        mcqs_json: mcqs.value,
+                        limitations_json: limitations.value,
+                        note: "Saved edits from static admin dashboard.",
+                    }),
+                );
                 applyResult(result, "Edits saved.");
-            })();
-        });
+            } finally {
+                setIsPending(false);
+            }
+        })();
     }
 
     function approve() {
         setMessage(null);
         setLastResult(null);
-        startTransition(() => {
-            void (async () => {
-                applyResult(await approveGeneratedArticleAction(article.id), "Generated article approved.");
-            })();
-        });
+        setIsPending(true);
+        void (async () => {
+            try {
+                applyResult(await toActionResult(() => approveGeneratedArticle(article.id)), "Generated article approved.");
+            } finally {
+                setIsPending(false);
+            }
+        })();
     }
 
     function submitReasonAction() {
@@ -130,20 +138,24 @@ export function ReviewEditor({ initialArticle }: { initialArticle: ReviewGenerat
 
         setMessage(null);
         setLastResult(null);
-        startTransition(() => {
-            void (async () => {
-                const result =
+        setIsPending(true);
+        void (async () => {
+            try {
+                const result = await toActionResult(() =>
                     reasonMode === "request_revision"
-                        ? await requestRevisionAction(article.id, cleanReason)
-                        : await rejectGeneratedArticleAction(article.id, cleanReason);
+                        ? requestRevision(article.id, cleanReason)
+                        : rejectGeneratedArticle(article.id, cleanReason),
+                );
                 applyResult(
                     result,
                     reasonMode === "request_revision"
                         ? "Revision requested. Status is now needs_revision."
                         : "Generated article rejected.",
                 );
-            })();
-        });
+            } finally {
+                setIsPending(false);
+            }
+        })();
     }
 
     return (

@@ -1,21 +1,25 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
-import { runAiPipelineAction, type ActionResult } from "@/app/actions";
 import { ActionResultPanel } from "@/components/ActionResultPanel";
+import { toActionResult, type ActionResult } from "@/lib/action-result";
+import { runAiPipeline } from "@/lib/api";
 
 export function RunAiForArticleButton({ articleId }: { articleId: string }) {
-    const [isPending, startTransition] = useTransition();
+    const [isPending, setIsPending] = useState(false);
     const [result, setResult] = useState<ActionResult<unknown> | null>(null);
 
     function run() {
         setResult(null);
-        startTransition(() => {
-            void (async () => {
-                setResult(await runAiPipelineAction(1, articleId));
-            })();
-        });
+        setIsPending(true);
+        void (async () => {
+            try {
+                setResult(await toActionResult(() => runAiPipeline(1, articleId)));
+            } finally {
+                setIsPending(false);
+            }
+        })();
     }
 
     return (

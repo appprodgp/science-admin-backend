@@ -1,23 +1,27 @@
 "use client";
 
-import { FormEvent, useState, useTransition } from "react";
+import { FormEvent, useState } from "react";
 
-import { runDiscoveryAction, type ActionResult } from "@/app/actions";
 import { ActionResultPanel } from "@/components/ActionResultPanel";
+import { toActionResult, type ActionResult } from "@/lib/action-result";
+import { runDiscovery } from "@/lib/api";
 
 export function DiscoveryRunForm() {
     const [limit, setLimit] = useState(1);
-    const [isPending, startTransition] = useTransition();
+    const [isPending, setIsPending] = useState(false);
     const [result, setResult] = useState<ActionResult<unknown> | null>(null);
 
     function onSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setResult(null);
-        startTransition(() => {
-            void (async () => {
-                setResult(await runDiscoveryAction(Math.max(1, limit)));
-            })();
-        });
+        setIsPending(true);
+        void (async () => {
+            try {
+                setResult(await toActionResult(() => runDiscovery(Math.max(1, limit))));
+            } finally {
+                setIsPending(false);
+            }
+        })();
     }
 
     return (
