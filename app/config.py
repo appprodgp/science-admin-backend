@@ -5,6 +5,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 LOCAL_DASHBOARD_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000")
+LOCAL_EXPO_WEB_ORIGINS = ("http://localhost:8081", "http://127.0.0.1:8081")
+LOCAL_DEVELOPMENT_CORS_ORIGINS = (*LOCAL_DASHBOARD_ORIGINS, *LOCAL_EXPO_WEB_ORIGINS)
 
 
 def _split_csv(value: str) -> list[str]:
@@ -144,14 +146,14 @@ class Settings(BaseSettings):
     def cors_allowed_origins(self) -> list[str]:
         """Return safe CORS origins for FastAPI middleware.
 
-        Local development always includes the Next.js dev server origins. In
-        production, only explicitly configured origins are allowed and wildcard
-        origins are never passed to the middleware.
+        Local development always includes dashboard and Expo web dev server
+        origins. In production, only explicitly configured origins are allowed
+        and wildcard origins are never passed to the middleware.
         """
 
         origins = [origin for origin in self.configured_cors_origins if origin != "*"]
         if not self.is_production:
-            origins.extend(LOCAL_DASHBOARD_ORIGINS)
+            origins.extend(LOCAL_DEVELOPMENT_CORS_ORIGINS)
         return _dedupe(origins)
 
     def validate_production_safety(self) -> None:
@@ -163,8 +165,8 @@ class Settings(BaseSettings):
         if self.cors_uses_wildcard:
             raise ValueError("Wildcard CORS origin '*' is not allowed in production.")
 
-        if len(self.cors_allowed_origins) != 1:
-            raise ValueError("Production CORS must contain exactly one deployed admin dashboard origin.")
+        if not self.cors_allowed_origins:
+            raise ValueError("Production CORS must contain at least one deployed frontend origin.")
 
 
 @lru_cache

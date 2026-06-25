@@ -83,7 +83,7 @@ def _invalid_production_variables() -> list[str]:
 
     if settings.cors_uses_wildcard:
         invalid.append("CORS_ALLOWED_ORIGINS")
-    if len(settings.cors_allowed_origins) != 1:
+    if not settings.cors_allowed_origins:
         invalid.append("CORS_ALLOWED_ORIGINS")
 
     return sorted(set(invalid))
