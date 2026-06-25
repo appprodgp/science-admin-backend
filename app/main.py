@@ -20,6 +20,7 @@ from app.api.admin_manual import router as admin_manual_router
 from app.api.admin_review import router as admin_review_router
 from app.api.health import router as health_router
 from app.api.internal_jobs import router as internal_jobs_router
+from app.api.public_articles import router as public_articles_router
 
 
 settings = get_settings()
@@ -50,6 +51,7 @@ app.include_router(internal_jobs_router)
 app.include_router(admin_llm_runs_router)
 app.include_router(admin_manual_router)
 app.include_router(admin_discovery_router)
+app.include_router(public_articles_router)
 
 
 @app.get("/")
