@@ -1,0 +1,13 @@
+{
+    "build": {
+        "preview": {
+            "distribution": "internal",
+            "android": {
+                "buildType": "apk"
+            },
+            "env": {
+                "EXPO_PUBLIC_API_BASE_URL": "https://science-admin-backend-471704454900.us-central1.run.app"
+            }
+        }
+    }
+}
