@@ -1,0 +1,39 @@
+﻿Step 3A web runtime check
+Timestamp: 2026-06-24T14:21:23.2239791+05:30
+Command: cd science-user-app && npm run web
+
+No existing app Expo web process found before retry.
+Started npm run web root PID: 36708
+Probe pending: attempt 1: curl exit 7, HTTP '000'
+Probe pending: attempt 2: curl exit 7, HTTP '000'
+Probe pending: attempt 3: curl exit 7, HTTP '000'
+Probe pending: attempt 4: curl exit 7, HTTP '000'
+Probe pending: attempt 5: curl exit 7, HTTP '000'
+Probe pending: attempt 6: curl exit 7, HTTP '000'
+Probe pending: attempt 7: curl exit 28, HTTP '000'
+Probe success on attempt 8: http://localhost:8081/ -> HTTP 200
+
+--- npm run web stdout ---
+
+> science-user-app@1.0.0 web
+> expo start --web
+
+Starting project at D:\science-admin-backend\science-user-app
+Starting Metro Bundler
+
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Î» Bundled 11860ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1267 modules)
+Web Bundled 12279ms node_modules\expo-router\entry.js (1212 modules)
+Î» Bundled 4497ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1 module)
+Web Bundled 5432ms node_modules\expo-router\entry.js (1 module)
+
+--- npm run web stderr ---
+props.pointerEvents is deprecated. Use style.pointerEvents
+"shadow*" style props are deprecated. Use "boxShadow".
+props.pointerEvents is deprecated. Use style.pointerEvents
+"shadow*" style props are deprecated. Use "boxShadow".
+
+
+Stopped started web process tree after check, root PID 36708.
+Result: PASS - Expo web runtime responded successfully.

@@ -20,6 +20,7 @@ REVIEW_ACTIONS: tuple[str, ...] = (
     "approved",
     "rejected",
     "edited",
+    "needs_revision",
     "sent_back_for_regeneration",
     "published",
     "unpublished",

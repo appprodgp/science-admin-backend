@@ -35,11 +35,11 @@ class GeneratedArticleRead(BaseModel):
     plain_title: str | None = None
     subtitle: str | None = None
     article_body: str | None = None
-    difficult_words_json: dict[str, Any] | list[Any] | None = None
-    mcqs_json: dict[str, Any] | list[Any] | None = None
-    limitations_json: dict[str, Any] | list[Any] | None = None
+    difficult_words_json: Any = None
+    mcqs_json: Any = None
+    limitations_json: Any = None
     source_attribution: str | None = None
-    fact_check_json: dict[str, Any] | list[Any] | None = None
+    fact_check_json: Any = None
     generation_model: str | None = None
     review_status: str
     published_at: datetime | None = None
@@ -65,4 +65,5 @@ class LlmRunRead(BaseModel):
     status: str
     error_message: str | None = None
     created_at: datetime
+
 
